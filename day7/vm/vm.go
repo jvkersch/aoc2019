@@ -10,6 +10,7 @@ type InputChannel chan int
 type OutputChannel chan int
 
 type IntegerVM struct {
+	Id      int
 	Ram     RAM
 	Inputs  InputChannel
 	Outputs OutputChannel
@@ -65,7 +66,6 @@ func (vm IntegerVM) jumpIfFalse() int {
 
 func (vm IntegerVM) readFromInput() int {
 	value := <-vm.Inputs
-
 	m1, _, _ := vm.decodeModes()
 	setValue(vm.Ram, vm.pc+1, m1, value)
 	return vm.pc + 2
@@ -138,6 +138,7 @@ func (vm IntegerVM) Run() int {
 			vm.pc = vm.executeBinaryOp(equals)
 		case 99:
 			// halt
+			close(vm.Outputs)
 			return vm.Ram[0]
 		default:
 			log.Fatalf("Invalid opcode %d", vm.Ram[vm.pc])
