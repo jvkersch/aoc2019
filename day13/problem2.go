@@ -2,11 +2,17 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"./vm"
 )
 
-type TileType int
+const (
+	WIDTH  = 41
+	HEIGHT = 25
+)
+
+type TileType uint8
 
 const (
 	Empty  TileType = 0
@@ -16,69 +22,126 @@ const (
 	Ball   TileType = 4
 )
 
-type Tile struct {
-	X    int
-	Y    int
-	Type TileType
+type Point struct {
+	X int
+	Y int
 }
 
-type Data struct {
-	paddle int
-	ball   int
+type Arcade struct {
+	field  [][]TileType // column-major
+	ball   Point
+	paddle Point
 	score  int
 }
 
-func ConsumeRelevantData(data <-chan int) <-chan Data {
-	out := make(chan Data)
+func (r *Arcade) InitializeArcade() {
+	r.field = make([][]TileType, WIDTH)
+	for i := 0; i < WIDTH; i++ {
+		r.field[i] = make([]TileType, HEIGHT)
+	}
+}
+
+func (r *Arcade) UpdateFromTiles(data <-chan int) {
 	go func() {
-		paddle := 0
-		ball := 0
-		score := -1
-		haveAllThree := 0
 		for {
 			x := <-data
 			y := <-data
-			typ, more := <-data
-			if TileType(typ) == Paddle {
-				paddle = x
-				haveAllThree++
-			}
-			if TileType(typ) == Ball {
-				ball = x
-				haveAllThree++
-			}
+			t, more := <-data
+
 			if x == -1 && y == 0 {
-				score = typ
-				haveAllThree++
+				r.score = t
+			} else {
+				r.field[x][y] = TileType(t)
 			}
-			if haveAllThree == 3 {
-				out <- Data{paddle, ball, score}
-				haveAllThree = 0
+
+			// update ball
+			if TileType(t) == Ball {
+				r.ball.X = x
+				r.ball.Y = y
 			}
+			// update paddle
+			if TileType(t) == Paddle {
+				r.paddle.X = x
+				r.paddle.Y = y
+			}
+
 			if !more {
 				break
 			}
 		}
 	}()
+}
+
+func (r *Arcade) PrintArcade() {
+	// for j := 0; j < HEIGHT; j++ {
+	// 	for i := 0; i < WIDTH; i++ {
+	// 		switch r.field[i][j] {
+	// 		case Empty:
+	// 			fmt.Print(" ")
+	// 		case Wall:
+	// 			fmt.Print("W")
+	// 		case Block:
+	// 			fmt.Print("#")
+	// 		case Paddle:
+	// 			fmt.Print("=")
+	// 		case Ball:
+	// 			fmt.Print("o")
+	// 		}
+	// 	}
+	// 	fmt.Println()
+	// }
+	fmt.Printf("Score: %d\n", r.score)
+}
+
+func readFromStdin() <-chan int {
+	out := make(chan int)
+	go func() {
+		defer close(out)
+
+		var i int
+		for {
+			_, err := fmt.Scanf("%d", &i)
+			if err != nil {
+				break
+			}
+			out <- i
+		}
+	}()
 	return out
+}
+
+func play(r *Arcade, output chan int) {
+	for {
+		signal := 0
+		if r.ball.X > r.paddle.X {
+			signal = +1
+		} else if r.ball.X < r.paddle.X {
+			signal = -1
+		}
+
+		output <- signal
+		time.Sleep(1 * time.Millisecond)
+		r.PrintArcade()
+	}
 }
 
 func main() {
 	m := vm.CreateVMFromFile("input")
 	m.Ram[0] = 2 // play for free
 
+	arcade := Arcade{}
+	arcade.InitializeArcade()
+	arcade.UpdateFromTiles(m.Outputs)
+
 	go m.Run()
 
-	for data := range ConsumeRelevantData(m.Outputs) {
-		signal := 0
-		if data.paddle < data.ball {
-			signal = -1
-		} else if data.paddle > data.ball {
-			signal = 1
-		}
-		m.Inputs <- signal
-		fmt.Printf("%d, %d, %d === %d\n", data.paddle, data.ball, signal, data.score)
-	}
+	// for input := range readFromStdin() {
+	// 	m.Inputs <- input
+	// 	time.Sleep(time.Second)
+	// 	arcade.PrintArcade()
+	// }
+	go play(&arcade, m.Inputs)
 
 	<-m.Controls
+	arcade.PrintArcade()
 }
