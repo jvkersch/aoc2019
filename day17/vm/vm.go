@@ -1,7 +1,6 @@
 package vm
 
 import (
-	"fmt"
 	"log"
 )
 
@@ -77,7 +76,6 @@ func (vm *IntegerVM) jumpIfFalse() int {
 }
 
 func (vm *IntegerVM) readFromInput() int {
-	fmt.Println("Reading from input")
 	value := <-vm.Inputs
 	m1, _, _ := vm.decodeModes()
 	vm.setValue(vm.pc+1, m1, value)
@@ -86,7 +84,8 @@ func (vm *IntegerVM) readFromInput() int {
 
 func (vm *IntegerVM) writeToOutput() int {
 	m1, _, _ := vm.decodeModes()
-	vm.Outputs <- vm.retrieveValue(vm.pc+1, m1)
+	value := vm.retrieveValue(vm.pc+1, m1)
+	vm.Outputs <- value
 	return vm.pc + 2
 }
 
